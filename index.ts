@@ -26,13 +26,8 @@ type Client = {
 }
 
 const clients: Client[] = []
-// const clients: Client[] = [
-//   {
-//     username: "bob",
-//     command: "standby",
-//   },
-// ]
 
+// TODO: consider IP based instead of username based
 app.get("/cmd", (req, res) => {
   const { username } = req.query as { username: string | undefined }
   if (!username) throw createHttpError(400, "username not provided")
