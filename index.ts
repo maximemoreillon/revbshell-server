@@ -9,7 +9,7 @@ import cors from "cors"
 import { createServer } from "http"
 import { Server } from "socket.io"
 
-const { EXPRESS_PORT = 18000 } = process.env
+const { EXPRESS_PORT = 80 } = process.env
 
 process.env.TZ = "Asia/Tokyo"
 
